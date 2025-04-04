@@ -1,0 +1,162 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Extracción Diaria de Ventas\n",
+        "Procesa las ventas del día anterior por proveedor y cliente"
+      ],
+      "metadata": {
+        "language": "markdown"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "from datetime import datetime, timedelta\n",
+        "import psycopg2\n",
+        "import json\n",
+        "import boto3\n",
+        "import logging\n",
+        "\n",
+        "# Configuración\n",
+        "DB_CONFIG = {\n",
+        "    'host': 'rds-endpoint',\n",
+        "    'database': 'ventas_db',\n",
+        "    'user': 'user',\n",
+        "    'password': 'password'\n",
+        "}\n",
+        "\n",
+        "S3_BUCKET = 'puntored-analytics'\n",
+        "PRODUCTOS = ['PRODUCTO_1', 'PRODUCTO_2', 'PRODUCTO_3']\n",
+        "processing_date = datetime.now().date() - timedelta(days=1)\n",
+        "\n",
+        "# Configurar logging\n",
+        "logging.basicConfig(\n",
+        "    level=logging.INFO,\n",
+        "    format='%(asctime)s - %(levelname)s - %(message)s'\n",
+        ")"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Extraer datos del día anterior\n",
+        "def extract_daily_sales():\n",
+        "    try:\n",
+        "        conn = psycopg2.connect(**DB_CONFIG)\n",
+        "        cursor = conn.cursor()\n",
+        "        \n",
+        "        query = \"\"\"\n",
+        "        SELECT \n",
+        "            cliente_id,\n",
+        "            producto,\n",
+        "            COUNT(*) as cantidad_transacciones,\n",
+        "            SUM(monto) as monto_total\n",
+        "        FROM ventas\n",
+        "        WHERE fecha = %s\n",
+        "        GROUP BY cliente_id, producto\n",
+        "        \"\"\"\n",
+        "        \n",
+        "        cursor.execute(query, (processing_date,))\n",
+        "        results = cursor.fetchall()\n",
+        "        \n",
+        "        logging.info(f\"Extraídos {len(results)} registros para {processing_date}\")\n",
+        "        \n",
+        "        cursor.close()\n",
+        "        conn.close()\n",
+        "        \n",
+        "        return results\n",
+        "    except Exception as e:\n",
+        "        logging.error(f\"Error al extraer datos: {str(e)}\")\n",
+        "        raise"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Procesar y formatear datos por proveedor\n",
+        "def process_provider_data(sales_data):\n",
+        "    try:\n",
+        "        provider_data = {}\n",
+        "        \n",
+        "        for row in sales_data:\n",
+        "            cliente_id, producto, cantidad, monto = row\n",
+        "            \n",
+        "            if producto not in provider_data:\n",
+        "                provider_data[producto] = []\n",
+        "                \n",
+        "            provider_data[producto].append({\n",
+        "                'cliente_id': cliente_id,\n",
+        "                'cantidad_transacciones': cantidad,\n",
+        "                'monto_total': float(monto)\n",
+        "            })\n",
+        "        \n",
+        "        logging.info(f\"Procesados datos para {len(provider_data)} productos\")\n",
+        "        return provider_data\n",
+        "    except Exception as e:\n",
+        "        logging.error(f\"Error al procesar datos: {str(e)}\")\n",
+        "        raise"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Guardar resultados en S3\n",
+        "def save_to_s3(provider_data):\n",
+        "    try:\n",
+        "        s3 = boto3.client('s3')\n",
+        "        \n",
+        "        for producto, data in provider_data.items():\n",
+        "            output_path = f'processed/{producto}/{processing_date}.json'\n",
+        "            \n",
+        "            s3.put_object(\n",
+        "                Bucket=S3_BUCKET,\n",
+        "                Key=output_path,\n",
+        "                Body=json.dumps(data)\n",
+        "            )\n",
+        "            \n",
+        "            logging.info(f\"Guardados datos para {producto} en {output_path}\")\n",
+        "    except Exception as e:\n",
+        "        logging.error(f\"Error al guardar en S3: {str(e)}\")\n",
+        "        raise"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Ejecutar procesamiento\n",
+        "try:\n",
+        "    sales_data = extract_daily_sales()\n",
+        "    provider_data = process_provider_data(sales_data)\n",
+        "    save_to_s3(provider_data)\n",
+        "    logging.info(\"Procesamiento completado exitosamente\")\n",
+        "except Exception as e:\n",
+        "    logging.error(f\"Error en el procesamiento: {str(e)}\")\n",
+        "    raise"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    }
+  ],
+  "metadata": {
+    "name": "01_extract_daily_data",
+    "notebookId": "extract_daily_data_notebook",
+    "language_info": {
+      "name": "python"
+    }
+  }
+} 

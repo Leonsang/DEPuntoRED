@@ -1,0 +1,146 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Carga de Datos Analíticos\n",
+        "Prepara y carga los datos transformados para consumo por la API"
+      ],
+      "metadata": {
+        "language": "markdown"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "%run \"../utils/config\"\n",
+        "%run \"../utils/common_functions\""
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "from pyspark.sql.functions import *\n",
+        "from pyspark.sql.window import Window\n",
+        "from datetime import datetime, timedelta"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Configuración de fechas\n",
+        "current_date = datetime.now().date()\n",
+        "last_month = current_date - timedelta(days=30)\n",
+        "last_week = current_date - timedelta(days=7)"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Preparar métricas mensuales\n",
+        "df_monthly = spark.read.table('provider_metrics')\\\n",
+        "    .where(col('year') == year(current_date))\\\n",
+        "    .groupBy('provider_id')\\\n",
+        "    .agg(\n",
+        "        sum('total_transactions').alias('monthly_transactions'),\n",
+        "        sum('total_amount').alias('monthly_revenue'),\n",
+        "        avg('avg_amount').alias('monthly_avg_ticket'),\n",
+        "        sum('unique_clients').alias('monthly_unique_clients')\n",
+        "    )"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Preparar tendencias semanales\n",
+        "df_weekly_trends = spark.read.table('hourly_trends')\\\n",
+        "    .groupBy('provider_id', 'hour_of_day')\\\n",
+        "    .agg(\n",
+        "        avg('avg_amount_by_hour_day').alias('typical_amount'),\n",
+        "        avg('transaction_count_by_hour_day').alias('typical_transactions')\n",
+        "    )"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Preparar top clientes\n",
+        "df_top_clients = spark.read.table('top_clients')\\\n",
+        "    .withColumn(\n",
+        "        'rank',\n",
+        "        row_number().over(\n",
+        "            Window.partitionBy('provider_id')\\\n",
+        "                .orderBy(col('total_amount').desc())\n",
+        "        )\n",
+        "    )\\\n",
+        "    .filter(col('rank') <= 10)\\\n",
+        "    .drop('rank')"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Guardar vistas materializadas para la API\n",
+        "df_monthly.write\\\n",
+        "    .format('delta')\\\n",
+        "    .mode('overwrite')\\\n",
+        "    .saveAsTable('api_monthly_metrics')\n",
+        "\n",
+        "df_weekly_trends.write\\\n",
+        "    .format('delta')\\\n",
+        "    .mode('overwrite')\\\n",
+        "    .saveAsTable('api_weekly_trends')\n",
+        "\n",
+        "df_top_clients.write\\\n",
+        "    .format('delta')\\\n",
+        "    .mode('overwrite')\\\n",
+        "    .saveAsTable('api_top_clients')"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Optimizar tablas para consultas rápidas\n",
+        "tables_to_optimize = [\n",
+        "    'api_monthly_metrics',\n",
+        "    'api_weekly_trends',\n",
+        "    'api_top_clients'\n",
+        "]\n",
+        "\n",
+        "for table in tables_to_optimize:\n",
+        "    optimize_delta_table(table)"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    }
+  ],
+  "metadata": {
+    "name": "03_load_analytics",
+    "notebookId": "load_analytics_notebook",
+    "language_info": {
+      "name": "python"
+    }
+  }
+} 

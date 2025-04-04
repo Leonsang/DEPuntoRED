@@ -1,0 +1,176 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Procesamiento en Tiempo Real\n",
+        "Procesa las ventas en tiempo real por proveedor y cliente"
+      ],
+      "metadata": {
+        "language": "markdown"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "from datetime import datetime\n",
+        "import psycopg2\n",
+        "import json\n",
+        "import boto3\n",
+        "import logging\n",
+        "import time\n",
+        "\n",
+        "# Configuración\n",
+        "DB_CONFIG = {\n",
+        "    'host': 'rds-endpoint',\n",
+        "    'database': 'ventas_db',\n",
+        "    'user': 'user',\n",
+        "    'password': 'password'\n",
+        "}\n",
+        "\n",
+        "KINESIS_STREAM = 'ventas-stream'\n",
+        "PRODUCTOS = ['PRODUCTO_1', 'PRODUCTO_2', 'PRODUCTO_3']\n",
+        "UMBRAL_ALERTA = 10000  # Umbral para alertas de transacciones grandes\n",
+        "\n",
+        "# Configurar logging\n",
+        "logging.basicConfig(\n",
+        "    level=logging.INFO,\n",
+        "    format='%(asctime)s - %(levelname)s - %(message)s'\n",
+        ")"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Extraer datos en tiempo real\n",
+        "def extract_realtime_data():\n",
+        "    try:\n",
+        "        conn = psycopg2.connect(**DB_CONFIG)\n",
+        "        cursor = conn.cursor()\n",
+        "        \n",
+        "        query = \"\"\"\n",
+        "        SELECT \n",
+        "            cliente_id,\n",
+        "            producto,\n",
+        "            monto,\n",
+        "            fecha\n",
+        "        FROM ventas\n",
+        "        WHERE fecha > NOW() - INTERVAL '1 minute'\n",
+        "        \"\"\"\n",
+        "        \n",
+        "        cursor.execute(query)\n",
+        "        results = cursor.fetchall()\n",
+        "        \n",
+        "        logging.info(f\"Extraídos {len(results)} registros en tiempo real\")\n",
+        "        \n",
+        "        cursor.close()\n",
+        "        conn.close()\n",
+        "        \n",
+        "        return results\n",
+        "    except Exception as e:\n",
+        "        logging.error(f\"Error al extraer datos en tiempo real: {str(e)}\")\n",
+        "        raise"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Enviar datos a Kinesis\n",
+        "def send_to_kinesis(records):\n",
+        "    try:\n",
+        "        kinesis = boto3.client('kinesis')\n",
+        "        \n",
+        "        for record in records:\n",
+        "            cliente_id, producto, monto, fecha = record\n",
+        "            \n",
+        "            data = {\n",
+        "                'cliente_id': cliente_id,\n",
+        "                'producto': producto,\n",
+        "                'monto': float(monto),\n",
+        "                'fecha': fecha.isoformat()\n",
+        "            }\n",
+        "            \n",
+        "            kinesis.put_record(\n",
+        "                StreamName=KINESIS_STREAM,\n",
+        "                Data=json.dumps(data),\n",
+        "                PartitionKey=producto\n",
+        "            )\n",
+        "            \n",
+        "            # Verificar alertas\n",
+        "            if float(monto) > UMBRAL_ALERTA:\n",
+        "                send_alert(data)\n",
+        "                \n",
+        "        logging.info(f\"Enviados {len(records)} registros a Kinesis\")\n",
+        "    except Exception as e:\n",
+        "        logging.error(f\"Error al enviar a Kinesis: {str(e)}\")\n",
+        "        raise"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Enviar alertas\n",
+        "def send_alert(record):\n",
+        "    try:\n",
+        "        cloudwatch = boto3.client('cloudwatch')\n",
+        "        \n",
+        "        cloudwatch.put_metric_data(\n",
+        "            Namespace='PuntoRed/Alertas',\n",
+        "            MetricData=[\n",
+        "                {\n",
+        "                    'MetricName': 'TransaccionGrande',\n",
+        "                    'Dimensions': [\n",
+        "                        {'Name': 'Producto', 'Value': record['producto']},\n",
+        "                        {'Name': 'Cliente', 'Value': record['cliente_id']}\n",
+        "                    ],\n",
+        "                    'Value': record['monto'],\n",
+        "                    'Unit': 'None'\n",
+        "                }\n",
+        "            ]\n",
+        "        )\n",
+        "        \n",
+        "        logging.warning(f\"Alerta enviada para transacción grande: {record}\")\n",
+        "    except Exception as e:\n",
+        "        logging.error(f\"Error al enviar alerta: {str(e)}\")\n",
+        "        raise"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Ejecutar procesamiento en tiempo real\n",
+        "try:\n",
+        "    while True:\n",
+        "        records = extract_realtime_data()\n",
+        "        if records:\n",
+        "            send_to_kinesis(records)\n",
+        "        time.sleep(60)  # Esperar 1 minuto\n",
+        "except Exception as e:\n",
+        "    logging.error(f\"Error en el procesamiento en tiempo real: {str(e)}\")\n",
+        "    raise"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    }
+  ],
+  "metadata": {
+    "name": "02_process_realtime",
+    "notebookId": "process_realtime_notebook",
+    "language_info": {
+      "name": "python"
+    }
+  }
+} 

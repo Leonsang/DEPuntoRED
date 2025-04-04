@@ -1,0 +1,132 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Transformación de Datos de Ventas\n",
+        "Procesa y transforma los datos de ventas aplicando reglas de negocio y validaciones"
+      ],
+      "metadata": {
+        "language": "markdown"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "%run \"../utils/config\"\n",
+        "%run \"../utils/common_functions\""
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "from pyspark.sql.functions import *\n",
+        "from pyspark.sql.window import Window\n",
+        "\n",
+        "# Configuración\n",
+        "batch_config = get_batch_config()"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Leer datos crudos\n",
+        "df_raw = spark.read.table('raw_sales')\n",
+        "\n",
+        "# Limpiar y validar datos\n",
+        "df_clean = clean_and_validate_data(df_raw)"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Enriquecer datos\n",
+        "df_enriched = df_clean.withColumn(\n",
+        "    'hour_of_day', hour('timestamp')\n",
+        ").withColumn(\n",
+        "    'day_of_week', dayofweek('timestamp')\n",
+        ").withColumn(\n",
+        "    'month', month('timestamp')\n",
+        ").withColumn(\n",
+        "    'year', year('timestamp')\n",
+        ")"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Calcular métricas por proveedor y producto\n",
+        "df_provider_metrics = df_enriched.groupBy(\n",
+        "    'provider_id',\n",
+        "    'product_id',\n",
+        "    'year',\n",
+        "    'month'\n",
+        ").agg(\n",
+        "    count('*').alias('total_transactions'),\n",
+        "    sum('amount').alias('total_amount'),\n",
+        "    avg('amount').alias('avg_amount'),\n",
+        "    countDistinct('client_id').alias('unique_clients')\n",
+        ")"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Calcular tendencias por hora y día\n",
+        "df_trends = df_enriched.groupBy(\n",
+        "    'provider_id',\n",
+        "    'hour_of_day',\n",
+        "    'day_of_week'\n",
+        ").agg(\n",
+        "    avg('amount').alias('avg_amount_by_hour_day'),\n",
+        "    count('*').alias('transaction_count_by_hour_day')\n",
+        ")"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Guardar resultados transformados\n",
+        "df_provider_metrics.write\\\n",
+        "    .format('delta')\\\n",
+        "    .mode('overwrite')\\\n",
+        "    .partitionBy('year', 'month', 'provider_id')\\\n",
+        "    .saveAsTable('provider_metrics')\n",
+        "\n",
+        "df_trends.write\\\n",
+        "    .format('delta')\\\n",
+        "    .mode('overwrite')\\\n",
+        "    .partitionBy('provider_id')\\\n",
+        "    .saveAsTable('hourly_trends')"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    }
+  ],
+  "metadata": {
+    "name": "02_transform_sales",
+    "notebookId": "transform_sales_notebook",
+    "language_info": {
+      "name": "python"
+    }
+  }
+} 

@@ -1,0 +1,127 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Ingesta de Datos en Tiempo Real\n",
+        "Procesa eventos de ventas desde Kafka y los almacena en Delta Lake"
+      ],
+      "metadata": {
+        "language": "markdown"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "%run \"../utils/config\""
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "from pyspark.sql.functions import *\n",
+        "from pyspark.sql.types import *\n",
+        "\n",
+        "# Schema para los eventos de ventas\n",
+        "schema = StructType([\n",
+        "    StructField(\"transaction_id\", StringType(), True),\n",
+        "    StructField(\"provider_id\", StringType(), True),\n",
+        "    StructField(\"product_id\", StringType(), True),\n",
+        "    StructField(\"amount\", DoubleType(), True),\n",
+        "    StructField(\"client_id\", StringType(), True),\n",
+        "    StructField(\"timestamp\", TimestampType(), True)\n",
+        "])"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Configuración del stream\n",
+        "stream_config = get_stream_config()\n",
+        "\n",
+        "# Leer stream de Kafka\n",
+        "df_stream = (spark.readStream\n",
+        "    .format(\"kafka\")\n",
+        "    .option(\"kafka.bootstrap.servers\", stream_config[\"kafka_bootstrap_servers\"])\n",
+        "    .option(\"subscribe\", stream_config[\"kafka_topic\"])\n",
+        "    .load()\n",
+        ")\n",
+        "\n",
+        "# Parsear JSON y aplicar schema\n",
+        "df_parsed = df_stream.select(\n",
+        "    from_json(col(\"value\").cast(\"string\"), schema).alias(\"data\")\n",
+        ").select(\"data.*\")"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Escribir a Delta Lake\n",
+        "query = (df_parsed.writeStream\n",
+        "    .format(\"delta\")\n",
+        "    .outputMode(\"append\")\n",
+        "    .option(\"checkpointLocation\", stream_config[\"checkpoint_location\"])\n",
+        "    .trigger(processingTime=stream_config[\"trigger_interval\"])\n",
+        "    .toTable(\"raw_sales\")\n",
+        ")"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Métricas en tiempo real\n",
+        "df_metrics = (df_parsed\n",
+        "    .withWatermark(\"timestamp\", \"1 minute\")\n",
+        "    .groupBy(\n",
+        "        window(\"timestamp\", \"1 minute\"),\n",
+        "        \"provider_id\",\n",
+        "        \"product_id\"\n",
+        "    )\n",
+        "    .agg(\n",
+        "        count(\"*\").alias(\"transaction_count\"),\n",
+        "        sum(\"amount\").alias(\"total_amount\"),\n",
+        "        avg(\"amount\").alias(\"avg_amount\")\n",
+        "    )\n",
+        ")"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Escribir métricas\n",
+        "query_metrics = (df_metrics.writeStream\n",
+        "    .format(\"delta\")\n",
+        "    .outputMode(\"append\")\n",
+        "    .option(\"checkpointLocation\", f\"{stream_config['checkpoint_location']}/metrics\")\n",
+        "    .trigger(processingTime=stream_config[\"trigger_interval\"])\n",
+        "    .toTable(\"realtime_metrics\")\n",
+        ")"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    }
+  ],
+  "metadata": {
+    "name": "01_ingest_stream",
+    "notebookId": "ingest_stream_notebook",
+    "language_info": {
+      "name": "python"
+    }
+  }
+} 

@@ -1,0 +1,89 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Funciones Comunes\n",
+        "Funciones de utilidad compartidas entre los notebooks de batch y streaming"
+      ],
+      "metadata": {
+        "language": "markdown"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "from pyspark.sql.functions import *\n",
+        "from pyspark.sql.window import Window"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def calculate_provider_metrics(df, group_by_cols):\n",
+        "    \"\"\"Calcula métricas estándar por proveedor\"\"\"\n",
+        "    return df.groupBy(group_by_cols).agg(\n",
+        "        count('*').alias('transaction_count'),\n",
+        "        sum('amount').alias('total_amount'),\n",
+        "        avg('amount').alias('avg_amount'),\n",
+        "        countDistinct('client_id').alias('unique_clients')\n",
+        "    )"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def get_top_n_clients(df, n=10):\n",
+        "    \"\"\"Obtiene los top N clientes por proveedor\"\"\"\n",
+        "    window_spec = Window.partitionBy('provider_id').orderBy(col('total_amount').desc())\n",
+        "    \n",
+        "    return df.withColumn('rank', row_number().over(window_spec))\\\n",
+        "        .filter(col('rank') <= n)\\\n",
+        "        .drop('rank')"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def clean_and_validate_data(df):\n",
+        "    \"\"\"Limpia y valida los datos de entrada\"\"\"\n",
+        "    return df.filter(\n",
+        "        (col('amount') > 0) &\n",
+        "        col('provider_id').isNotNull() &\n",
+        "        col('client_id').isNotNull()\n",
+        "    )"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def optimize_delta_table(table_name, retention_hours=168):\n",
+        "    \"\"\"Optimiza una tabla Delta\"\"\"\n",
+        "    spark.sql(f\"OPTIMIZE {table_name}\")\n",
+        "    spark.sql(f\"VACUUM {table_name} RETAIN {retention_hours} HOURS\")"
+      ],
+      "metadata": {
+        "language": "python"
+      }
+    }
+  ],
+  "metadata": {
+    "name": "common_functions",
+    "notebookId": "common_functions_notebook",
+    "language_info": {
+      "name": "python"
+    }
+  }
+} 

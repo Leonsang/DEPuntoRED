@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2024-03-19T12:00:00.000Z" agent="Mozilla/5.0" version="21.7.4" type="device">
+    <diagram id="realtime_pipeline" name="Pipeline en Tiempo Real - PuntoRed">
+        <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="800" math="0" shadow="0" background="#18191A">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                
+                <!-- Título -->
+                <mxCell id="title" value="Pipeline en Tiempo Real - PuntoRed" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1;fontColor=#FFFFFF;" vertex="1" parent="1">
+                    <mxGeometry x="400" y="40" width="400" height="40" as="geometry"/>
+                </mxCell>
+                
+                <!-- Subtítulo -->
+                <mxCell id="subtitle" value="Procesamiento de ventas por proveedor en tiempo real" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=0;fontColor=#CCCCCC;" vertex="1" parent="1">
+                    <mxGeometry x="400" y="80" width="400" height="30" as="geometry"/>
+                </mxCell>
+                
+                <!-- Componentes -->
+                <mxCell id="rds" value="Amazon RDS&#xa;Base de Ventas" style="outlineConnect=0;fontColor=#FFFFFF;fillColor=#2E73B8;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.rds;" vertex="1" parent="1">
+                    <mxGeometry x="200" y="200" width="80" height="80" as="geometry"/>
+                </mxCell>
+                
+                <mxCell id="kinesis_analytics" value="Kinesis Analytics&#xa;Procesamiento" style="outlineConnect=0;fontColor=#FFFFFF;fillColor=#4D27AA;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.kinesis_data_analytics;" vertex="1" parent="1">
+                    <mxGeometry x="500" y="200" width="80" height="80" as="geometry"/>
+                </mxCell>
+                
+                <mxCell id="dynamodb" value="DynamoDB&#xa;Métricas en Tiempo Real" style="outlineConnect=0;fontColor=#FFFFFF;fillColor=#3334B9;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.dynamodb;" vertex="1" parent="1">
+                    <mxGeometry x="800" y="200" width="80" height="80" as="geometry"/>
+                </mxCell>
+                
+                <mxCell id="api_gateway" value="API Gateway&#xa;Exposición" style="outlineConnect=0;fontColor=#FFFFFF;fillColor=#4D27AA;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.api_gateway;" vertex="1" parent="1">
+                    <mxGeometry x="1000" y="200" width="80" height="80" as="geometry"/>
+                </mxCell>
+                
+                <mxCell id="cloudwatch" value="CloudWatch&#xa;Métricas y Logs" style="outlineConnect=0;fontColor=#FFFFFF;fillColor=#759C3E;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.cloudwatch;" vertex="1" parent="1">
+                    <mxGeometry x="500" y="400" width="80" height="80" as="geometry"/>
+                </mxCell>
+                
+                <!-- Líneas de flujo -->
+                <mxCell id="flow_line1" value="1. Extracción" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#545B64;curved=1;" edge="1" parent="1" source="rds" target="kinesis_analytics">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                
+                <mxCell id="flow_line2" value="2. Agregación" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#545B64;curved=1;" edge="1" parent="1" source="kinesis_analytics" target="dynamodb">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                
+                <mxCell id="flow_line3" value="3. Exposición" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#545B64;curved=1;" edge="1" parent="1" source="dynamodb" target="api_gateway">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                
+                <!-- Líneas de monitoreo -->
+                <mxCell id="monitor_line1" value="Monitoreo" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#545B64;dashed=1;" edge="1" parent="1" source="kinesis_analytics" target="cloudwatch">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                
+                <!-- Etiquetas de proceso -->
+                <mxCell id="label1" value="Datos de ventas&#xa;por proveedor" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontStyle=0;fontColor=#CCCCCC;" vertex="1" parent="1">
+                    <mxGeometry x="350" y="160" width="100" height="40" as="geometry"/>
+                </mxCell>
+                
+                <mxCell id="label2" value="SQL en tiempo real:&#xa;- COUNT transacciones&#xa;- SUM montos&#xa;GROUP BY cliente, fecha" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontStyle=0;fontColor=#CCCCCC;" vertex="1" parent="1">
+                    <mxGeometry x="650" y="140" width="120" height="60" as="geometry"/>
+                </mxCell>
+                
+                <mxCell id="label3" value="Consulta&#xa;en tiempo real" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontStyle=0;fontColor=#CCCCCC;" vertex="1" parent="1">
+                    <mxGeometry x="900" y="160" width="100" height="40" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile> 
